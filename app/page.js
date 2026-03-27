@@ -1,184 +1,158 @@
-'use client'
+import { Terminal, Rocket, Clock, Activity, Server } from "lucide-react"
+import Link from "next/link"
+import { Navigation, navItems } from "@/components/navigation"
 
-import { useState, useEffect } from 'react'
-
-// 模拟数据（实际会用 Gist API）
-const mockCronJobs = [
-  { id: '1', name: '恋爱纪念日-2周年', schedule: '2026-04-16 09:00', status: 'idle', nextRun: '21天后' },
-  { id: '2', name: '恋爱纪念日-每年', schedule: '每年4月16日 09:00', status: 'idle', nextRun: '21天后' },
+const deploys = [
+  { id: 1, name: "厦门旅行攻略", url: "http://106.12.56.109/", status: "success", time: "2026-03-26 18:32" },
+  { id: 2, name: "部署控制台", url: "http://106.12.56.109:8080/", status: "success", time: "2026-03-26 18:32" }
 ]
 
-const mockDeployments = [
-  { id: '1', name: '示例网站', url: 'https://example.vercel.app', date: '2026-03-26', status: 'success' },
-]
+// 动态获取定时任务
+async function getCronJobs() {
+  try {
+    const res = await fetch('http://localhost:8080/api/cron', { cache: 'no-store' })
+    const data = await res.json()
+    return data.jobs || []
+  } catch {
+    return []  // 默认值
+  }
+}
 
-export default function Home() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [password, setPassword] = useState('')
-  const [activeTab, setActiveTab] = useState('dashboard')
-  const [cronJobs, setCronJobs] = useState([])
-  const [deployments, setDeployments] = useState([])
-  const [loading, setLoading] = useState(false)
-
-  // 登录
-  const handleLogin = (e) => {
-    e.preventDefault()
-    if (password === '5201314') {
-      setIsLoggedIn(true)
-      localStorage.setItem('dashboard_password', password)
-    } else {
-      alert('密码错误')
+// 解析 cron 表达式为可读文本
+function parseCron(expr, jobName = '') {
+  if (!expr) return ''
+  
+  // 一次性任务（日期格式，如 2026-04-16 09:00）
+  if (expr.includes('-') && !expr.includes('*')) {
+    const match = expr.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})/)
+    if (match) {
+      return `${match[2]}月${match[3]}日 ${match[4]}:${match[5]}`
+    }
+    return expr
+  }
+  
+  // 解析 cron 表达式 (分 时 日 月 周)
+  const parts = expr.split(' ')
+  if (parts.length >= 2) {
+    const min = parts[0].padStart(2, '0')
+    const hour = parts[1].padStart(2, '0')
+    const time = `${hour}:${min}`
+    
+    // 工作日格式 (1-5 = 周一到周五)
+    if (parts[4] === '1-5') {
+      return `每天 ${time} (工作日)`
+    }
+    // 每年某月某日 (如 0 9 16 4 *)
+    if (parts[2] !== '*' && parts[3] !== '*') {
+      return `${parts[3]}月${parts[2]}日 ${time}`
+    }
+    // 简单格式：每天
+    if (parts[4] === '*') {
+      return `每天 ${time}`
     }
   }
+  return expr
+}
 
-  // 检查登录状态
-  useEffect(() => {
-    const saved = localStorage.getItem('dashboard_password')
-    if (saved === '5201314') {
-      setIsLoggedIn(true)
-    }
-  }, [])
-
-  // 加载数据
-  useEffect(() => {
-    if (isLoggedIn) {
-      setCronJobs(mockCronJobs)
-      setDeployments(mockDeployments)
-    }
-  }, [isLoggedIn])
-
-  if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <form onSubmit={handleLogin} className="bg-gray-800 p-8 rounded-lg shadow-lg w-80">
-          <h1 className="text-2xl font-bold mb-6 text-center">🦞 小龙虾后台</h1>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="请输入密码"
-            className="w-full p-3 rounded bg-gray-700 border border-gray-600 mb-4 focus:border-orange-500 focus:outline-none"
-          />
-          <button type="submit" className="w-full bg-orange-500 hover:bg-orange-600 p-3 rounded font-bold">
-            登录
-          </button>
-        </form>
-      </div>
-    )
-  }
-
+export default async function HomePage() {
+  const cronJobs = await getCronJobs()
   return (
-    <div className="min-h-screen">
-      {/* 顶部导航 */}
-      <nav className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <h1 className="text-xl font-bold">🦞 小龙虾控制台</h1>
-          <button
-            onClick={() => { setIsLoggedIn(false); localStorage.removeItem('dashboard_password') }}
-            className="text-gray-400 hover:text-white"
-          >
-            退出
-          </button>
-        </div>
-      </nav>
-
-      {/* 标签页 */}
-      <div className="max-w-6xl mx-auto mt-6 px-6">
-        <div className="flex gap-4 border-b border-gray-700 pb-2">
-          {['dashboard', 'cron', 'deployments'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-t ${
-                activeTab === tab
-                  ? 'bg-gray-800 text-orange-500 border-b-2 border-orange-500'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              {tab === 'dashboard' && '📊 总览'}
-              {tab === 'cron' && '⏰ 定时任务'}
-              {tab === 'deployments' && '🚀 部署记录'}
-            </button>
-          ))}
-        </div>
-
-        {/* 内容区 */}
-        <div className="bg-gray-800 rounded-b rounded-tr p-6 mt-2">
-          {activeTab === 'dashboard' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-gray-700 p-6 rounded-lg">
-                <div className="text-3xl font-bold text-orange-500">{cronJobs.length}</div>
-                <div className="text-gray-400 mt-2">定时任务</div>
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Header */}
+      <header className="border-b bg-card/50 backdrop-blur sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Terminal className="w-6 h-6 text-primary" />
               </div>
-              <div className="bg-gray-700 p-6 rounded-lg">
-                <div className="text-3xl font-bold text-green-500">{deployments.length}</div>
-                <div className="text-gray-400 mt-2">部署项目</div>
-              </div>
-              <div className="bg-gray-700 p-6 rounded-lg">
-                <div className="text-3xl font-bold text-blue-500">1</div>
-                <div className="text-gray-400 mt-2">运行中项目</div>
+              <div>
+                <h1 className="text-xl font-bold">部署控制台</h1>
+                <p className="text-sm text-muted-foreground">Dashboard</p>
               </div>
             </div>
-          )}
+            <Navigation />
+          </div>
+        </div>
+      </header>
 
-          {activeTab === 'cron' && (
-            <div>
-              <h2 className="text-xl font-bold mb-4">定时任务列表</h2>
-              {cronJobs.length === 0 ? (
-                <p className="text-gray-400">暂无定时任务</p>
-              ) : (
-                <div className="space-y-3">
-                  {cronJobs.map((job) => (
-                    <div key={job.id} className="bg-gray-700 p-4 rounded-lg flex justify-between items-center">
-                      <div>
-                        <div className="font-bold">{job.name}</div>
-                        <div className="text-gray-400 text-sm mt-1">{job.schedule}</div>
-                      </div>
-                      <div className="text-right">
-                        <span className="bg-green-900 text-green-400 px-2 py-1 rounded text-sm">
-                          {job.status}
-                        </span>
-                        <div className="text-gray-400 text-sm mt-1">{job.nextRun}</div>
-                      </div>
-                    </div>
-                  ))}
+      <main className="container mx-auto px-4 py-8">
+        {/* 统计卡片 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Link href="/deployments" className="p-6 rounded-lg border bg-card hover:bg-accent/20 transition-colors">
+            <div className="flex items-center gap-3">
+              <Rocket className="w-8 h-8 text-orange-500" />
+              <div>
+                <div className="text-2xl font-bold">{deploys.length}</div>
+                <div className="text-sm text-muted-foreground">部署项目</div>
+              </div>
+            </div>
+          </Link>
+          
+          <Link href="/cron" className="p-6 rounded-lg border bg-card hover:bg-accent/20 transition-colors">
+            <div className="flex items-center gap-3">
+              <Clock className="w-8 h-8 text-purple-500" />
+              <div>
+                <div className="text-2xl font-bold">{cronJobs.length}</div>
+                <div className="text-sm text-muted-foreground">定时任务</div>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/server" className="p-6 rounded-lg border bg-card hover:bg-accent/20 transition-colors">
+            <div className="flex items-center gap-3">
+              <Server className="w-8 h-8 text-cyan-500" />
+              <div>
+                <div className="text-2xl font-bold">2</div>
+                <div className="text-sm text-muted-foreground">服务端口</div>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/logs" className="p-6 rounded-lg border bg-card hover:bg-accent/20 transition-colors">
+            <div className="flex items-center gap-3">
+              <Activity className="w-8 h-8 text-blue-500" />
+              <div>
+                <div className="text-2xl font-bold">5</div>
+                <div className="text-sm text-muted-foreground">最近日志</div>
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        {/* 快捷入口 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="p-6 rounded-lg border bg-card">
+            <h3 className="text-lg font-semibold mb-4">快速链接</h3>
+            <div className="space-y-2">
+              {deploys.map(d => (
+                <a key={d.id} href={d.url} target="_blank" className="flex items-center justify-between p-3 rounded bg-muted/50 hover:bg-muted transition-colors">
+                  <span>{d.name}</span>
+                  <span className="text-xs text-green-500">✓ 运行中</span>
+                </a>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-6 rounded-lg border bg-card">
+            <h3 className="text-lg font-semibold mb-4">即将执行</h3>
+            <div className="space-y-2">
+              {cronJobs.map(job => (
+                <div key={job.id} className="flex items-center justify-between p-3 rounded bg-muted/50">
+                  <span>{job.name}</span>
+                  <span className="text-xs text-muted-foreground">{parseCron(job.schedule)}</span>
                 </div>
-              )}
+              ))}
             </div>
-          )}
-
-          {activeTab === 'deployments' && (
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">部署记录</h2>
-                <button className="bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded text-sm">
-                  + 新建部署
-                </button>
-              </div>
-              {deployments.length === 0 ? (
-                <p className="text-gray-400">暂无部署记录</p>
-              ) : (
-                <div className="space-y-3">
-                  {deployments.map((dep) => (
-                    <div key={dep.id} className="bg-gray-700 p-4 rounded-lg flex justify-between items-center">
-                      <div>
-                        <div className="font-bold">{dep.name}</div>
-                        <a href={dep.url} target="_blank" className="text-blue-400 text-sm hover:underline">
-                          {dep.url}
-                        </a>
-                        <div className="text-gray-400 text-sm mt-1">{dep.date}</div>
-                      </div>
-                      <span className="bg-green-900 text-green-400 px-2 py-1 rounded text-sm">
-                        {dep.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          </div>
         </div>
-      </div>
+      </main>
+
+      <footer className="border-t py-6 mt-12">
+        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+          <p>🦞 部署控制台 v2.0</p>
+        </div>
+      </footer>
     </div>
   )
 }
